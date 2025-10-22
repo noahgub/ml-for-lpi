@@ -56,13 +56,13 @@ def run_one_val_and_grad(run_id: str, _cfg_path: str):
 
     from adept import ergoExo
 
-    from ml4tpd import TPDModule
+    from ml4tpd import SRSModule
 
     with open(_cfg_path, "r") as fi:
         cfg = yaml.safe_load(fi)
 
     exo = ergoExo(mlflow_run_id=run_id, mlflow_nested=True)
-    modules = exo.setup(cfg, adept_module=TPDModule)
+    modules = exo.setup(cfg, adept_module=SRSModule)
     diff_modules, static_modules = {}, {}
     diff_modules["laser"], static_modules["laser"] = eqx.partition(
         modules["laser"], modules["laser"].get_partition_spec()
@@ -339,7 +339,9 @@ def run_opt(_cfg_path: str):
     _intensity = cfg["units"]["laser intensity"]
 
     # cfg["mlflow"]["run"] = f"temperature={_tt}-gsl={_gsl}-intensity={_intensity}"
-    mlflow.set_experiment(cfg["mlflow"]["experiment"])
+    experiment = cfg["mlflow"]["experiment"]
+    mlflow.set_experiment(experiment)
+    print(f"Experiment: {experiment}")
 
     with mlflow.start_run(run_name=cfg["mlflow"]["run"]) as mlflow_run:
         with tempfile.TemporaryDirectory(dir=BASE_TEMPDIR) as td:

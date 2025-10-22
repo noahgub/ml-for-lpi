@@ -1,5 +1,5 @@
 import os
-
+from parsl.addresses import address_by_hostname  # or address_by_interface
 
 def setup_parsl(parsl_provider="local", num_gpus=4, nodes=1, walltime="00:30:00", label="tpd"):
     from parsl.config import Config
@@ -15,6 +15,8 @@ def setup_parsl(parsl_provider="local", num_gpus=4, nodes=1, walltime="00:30:00"
                 label=label,
                 provider=this_provider(**provider_args),
                 cpu_affinity="block",
+                address=address_by_hostname(),
+                worker_port_range=(50000, 60000),
             )
 
         else:
@@ -27,6 +29,8 @@ def setup_parsl(parsl_provider="local", num_gpus=4, nodes=1, walltime="00:30:00"
                 provider=this_provider(**provider_args),
                 max_workers_per_node=4,
                 cpu_affinity="block",
+                address=address_by_hostname(),
+                worker_port_range=(50000, 60000),
             )
 
     elif parsl_provider == "gpu":
@@ -34,19 +38,20 @@ def setup_parsl(parsl_provider="local", num_gpus=4, nodes=1, walltime="00:30:00"
         provider_args = get_gpu_provider_args(nodes, walltime)
 
         htex = HighThroughputExecutor(
-            available_accelerators=4, label=label, provider=this_provider(**provider_args), cpu_affinity="block"
+            available_accelerators=4, label=label, provider=this_provider(**provider_args), cpu_affinity="block",
+            address=address_by_hostname(),
+            worker_port_range=(50000, 60000),
         )
 
-    return Config(executors=[htex], retries=1)
+    return Config(executors=[htex], retries=1, run_dir="/global/homes/n/ngub/srs/parsl_runs")
 
 
 def get_singlenode_local_provider_args():
     provider_args = dict(
-        worker_init=f"source /global/common/software/m4490/archis/venvs/ml-for-lpi/bin/activate; \
-                        export PYTHONPATH=$PYTHONPATH:/global/homes/a/archis/ml-for-lpi; \
-                        export BASE_TEMPDIR='/pscratch/sd/a/archis/tmp/'; \
+        worker_init=f"  source /global/homes/n/ngub/srs/.venv/bin/activate; \
+                        export PYTHONPATH=$PYTHONPATH:/global/homes/n/ngub/srs/ml-for-lpi; \
+                        export BASE_TEMPDIR='/pscratch/sd/n/ngub/tmp/'; \
                         export MLFLOW_TRACKING_URI='https://continuum.ergodic.io/experiments/'; \
-                        module unload cudatoolkit; \
                         export MLFLOW_TRACKING_USERNAME={os.environ['MLFLOW_TRACKING_USERNAME']}; \
                         export MLFLOW_TRACKING_PASSWORD={os.environ['MLFLOW_TRACKING_PASSWORD']};",
         init_blocks=1,
@@ -61,11 +66,10 @@ def get_multinode_local_provider_args(nodes):
     from parsl.launchers import SrunLauncher
 
     provider_args = dict(
-        worker_init=f"source /global/common/software/m4490/archis/venvs/ml-for-lpi/bin/activate; \
-                        export PYTHONPATH=$PYTHONPATH:/global/homes/a/archis/ml-for-lpi; \
-                        export BASE_TEMPDIR='/pscratch/sd/a/archis/tmp/'; \
+        worker_init=f"source /global/homes/n/ngub/srs/.venv/bin/activate; \
+                        export PYTHONPATH=$PYTHONPATH:/global/homes/n/ngub/srs/ml-for-lpi; \
+                        export BASE_TEMPDIR='/pscratch/sd/n/ngub/tmp/'; \
                         export MLFLOW_TRACKING_URI='https://continuum.ergodic.io/experiments/'; \
-                        module unload cudatoolkit; \
                         export MLFLOW_TRACKING_USERNAME={os.environ['MLFLOW_TRACKING_USERNAME']}; \
                         export MLFLOW_TRACKING_PASSWORD={os.environ['MLFLOW_TRACKING_PASSWORD']};",
         nodes_per_block=1,
@@ -86,11 +90,10 @@ def get_gpu_provider_args(nodes, walltime):
         account="m5057_g",
         scheduler_options="\n".join(sched_args),
         worker_init=f"export SLURM_CPU_BIND='cores';\
-                    export PYTHONPATH=$PYTHONPATH:/global/homes/a/archis/ml-for-lpi; \
-                    source /global/common/software/m4490/archis/venvs/ml-for-lpi/bin/activate; \
-                    export BASE_TEMPDIR='/pscratch/sd/a/archis/tmp/'; \
+                    export PYTHONPATH=$PYTHONPATH:/global/homes/n/ngub/srs/ml-for-lpi; \
+                    source /global/homes/n/ngub/srs/.venv/bin/activate; \
+                    export BASE_TEMPDIR='/pscratch/sd/n/ngub/tmp/'; \
                     export MLFLOW_TRACKING_URI='https://continuum.ergodic.io/experiments/'; \
-                    module unload cudatoolkit; \
                     export MLFLOW_TRACKING_USERNAME={os.environ['MLFLOW_TRACKING_USERNAME']}; \
                     export MLFLOW_TRACKING_PASSWORD={os.environ['MLFLOW_TRACKING_PASSWORD']};",
         launcher=SrunLauncher(overrides="--gpus-per-node 4 -c 128"),

@@ -41,8 +41,8 @@ grid:
   low_pass_filter: 0.66
   tmax: 15.0ps
   tmin: 0.0ns
-  ymax: 3um
-  ymin: -3um
+  ymax: 0.25um # plus/minus 3um originally, lowered for SRS since SRS is 1D problem
+  ymin: -0.25um
 
 
 parsl:
@@ -50,7 +50,7 @@ parsl:
   nodes: 1
 
 mlflow:
-  experiment: opt-randomphase-64lines
+  experiment: ngub_srs
   run: tpd-scan
 save:
   fields:

@@ -1,1 +1,1 @@
-from .solvers import TPDModule, TPDThresholdModule
+from .solvers import TPDModule, TPDThresholdModule, SRSModule

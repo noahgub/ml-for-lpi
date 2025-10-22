@@ -62,7 +62,7 @@ def run_matlab(_cfg_path, bandwidth=False):
                     fig, ax = plt.subplots(1, 1, figsize=(6, 4), tight_layout=True)
                     ax.semilogy(tax, epwEnergy, label="EPW Energy")
                     ax.set_xlabel("Time (ps)")
-                    ax.set_ylabel("EPW Energy")
+                    ax.set_ylabel("Log EPW Energy")
                     fig.savefig(os.path.join(td, "epw_energy.png"))
                     plt.close()
 
@@ -85,83 +85,84 @@ def run_matlab(_cfg_path, bandwidth=False):
                     tslice = slice(0, -1, t_skip)
 
                     # save laser fields
-                    E0x = np.array([data["E0_save"][i]["x"] for i in range(len(data["E0_save"]))])
-                    E0y = np.array([data["E0_save"][i]["y"] for i in range(len(data["E0_save"]))])
+                    # E0x = np.array([data["E0_save"][i]["x"] for i in range(len(data["E0_save"]))])
+                    # E0y = np.array([data["E0_save"][i]["y"] for i in range(len(data["E0_save"]))])
 
-                    laser_ds = xr.Dataset(
-                        {
-                            "E0x": (("time", "x", "y"), E0x),
-                            "E0y": (("time", "x", "y"), E0y),
-                        },
-                        coords={
-                            "x": ("x", x_matlab_y_adept, {"units": "um"}),
-                            "y": ("y", y_matlab_x_adept, {"units": "um"}),
-                            "time": ("time", t, {"units": "ps"}),
-                        },
-                    )
+                    # laser_ds = xr.Dataset(
+                    #     {
+                    #         "E0x": (("time", "x", "y"), E0x),
+                    #         "E0y": (("time", "x", "y"), E0y),
+                    #     },
+                    #     coords={
+                    #         "x": ("x", x_matlab_y_adept, {"units": "um"}),
+                    #         "y": ("y", y_matlab_x_adept, {"units": "um"}),
+                    #         "time": ("time", t, {"units": "ps"}),
+                    #     },
+                    # )
 
-                    np.abs(laser_ds["E0x"][tslice].T).plot(col="time", col_wrap=4)
-                    plt.savefig(os.path.join(laser_dir, "E0x.png"))
-                    plt.close()
+                    # np.abs(laser_ds["E0x"][tslice].T).plot(col="time", col_wrap=4)
+                    # plt.savefig(os.path.join(laser_dir, "E0x.png"))
+                    # plt.close()
 
-                    np.abs(laser_ds["E0y"][tslice].T).plot(col="time", col_wrap=4)
-                    plt.savefig(os.path.join(laser_dir, "E0y.png"))
-                    plt.close()
+                    # np.abs(laser_ds["E0y"][tslice].T).plot(col="time", col_wrap=4)
+                    # plt.savefig(os.path.join(laser_dir, "E0y.png"))
+                    # plt.close()
 
-                    # plot lineout of E0y
-                    np.abs(laser_ds["E0y"][tslice].isel(y=E0y.shape[2] // 2)).plot(col="time", col_wrap=4)
-                    plt.savefig(os.path.join(laser_dir, "E0y_lineout.png"))
-                    plt.close()
-                    laser_ds.to_netcdf(os.path.join(laser_dir, "laser_fields.nc"))
+                    # # plot lineout of E0y
+                    # np.abs(laser_ds["E0y"][tslice].isel(y=E0y.shape[2] // 2)).plot(col="time", col_wrap=4)
+                    # plt.savefig(os.path.join(laser_dir, "E0y_lineout.png"))
+                    # plt.close()
+                    # laser_ds.to_netcdf(os.path.join(laser_dir, "laser_fields.nc"))
+
                     # save epw fields
-                    phi = np.array([data["divE_save"][i] for i in range(len(data["divE_save"]))])
-                    phi_da = xr.DataArray(
-                        phi,
-                        dims=("time", "x", "y"),
-                        coords={
-                            "x": ("x", x_matlab_y_adept, {"units": "um"}),
-                            "y": ("y", y_matlab_x_adept, {"units": "um"}),
-                            "time": ("time", t, {"units": "ps"}),
-                        },
-                        name="phi",
-                    )
+                    # phi = np.array([data["divE_save"][i] for i in range(len(data["divE_save"]))])
+                    # phi_da = xr.DataArray(
+                    #     phi,
+                    #     dims=("time", "x", "y"),
+                    #     coords={
+                    #         "x": ("x", x_matlab_y_adept, {"units": "um"}),
+                    #         "y": ("y", y_matlab_x_adept, {"units": "um"}),
+                    #         "time": ("time", t, {"units": "ps"}),
+                    #     },
+                    #     name="phi",
+                    # )
 
-                    np.abs(phi_da[tslice].T).plot(col="time", col_wrap=4)
-                    plt.savefig(os.path.join(epw_dir, "phi.png"))
-                    phi_da.to_netcdf(os.path.join(epw_dir, "epw_fields.nc"))
-                    plt.close()
+                    # np.abs(phi_da[tslice].T).plot(col="time", col_wrap=4)
+                    # plt.savefig(os.path.join(epw_dir, "phi.png"))
+                    # phi_da.to_netcdf(os.path.join(epw_dir, "epw_fields.nc"))
+                    # plt.close()
 
-                    os.makedirs(density_dir := os.path.join(td, "density"), exist_ok=True)
-                    os.makedirs(nelf_dir := os.path.join(td, "nelf"), exist_ok=True)
+                    # os.makedirs(density_dir := os.path.join(td, "density"), exist_ok=True)
+                    # os.makedirs(nelf_dir := os.path.join(td, "nelf"), exist_ok=True)
 
-                    background_density_da = xr.DataArray(
-                        data["backgroundDensity"],
-                        dims=("x", "y"),
-                        coords={
-                            "x": ("x", x_matlab_y_adept, {"units": "um"}),
-                            "y": ("y", y_matlab_x_adept, {"units": "um"}),
-                        },
-                        name="background_density",
-                    )
-                    nelf_da = xr.DataArray(
-                        data["Nelf"],
-                        dims=("x", "y"),
-                        coords={
-                            "x": ("x", x_matlab_y_adept, {"units": "um"}),
-                            "y": ("y", y_matlab_x_adept, {"units": "um"}),
-                            # "time": ("time", t, {"units": "ps"}),
-                        },
-                        name="nelf",
-                    )
-                    background_density_da.T.plot()
-                    plt.savefig(os.path.join(density_dir, "background_density.png"))
-                    plt.close()
-                    background_density_da.to_netcdf(os.path.join(density_dir, "background_density.nc"))
+                    # background_density_da = xr.DataArray(
+                    #     data["backgroundDensity"],
+                    #     dims=("x", "y"),
+                    #     coords={
+                    #         "x": ("x", x_matlab_y_adept, {"units": "um"}),
+                    #         "y": ("y", y_matlab_x_adept, {"units": "um"}),
+                    #     },
+                    #     name="background_density",
+                    # )
+                    # nelf_da = xr.DataArray(
+                    #     data["Nelf"],
+                    #     dims=("x", "y"),
+                    #     coords={
+                    #         "x": ("x", x_matlab_y_adept, {"units": "um"}),
+                    #         "y": ("y", y_matlab_x_adept, {"units": "um"}),
+                    #         # "time": ("time", t, {"units": "ps"}),
+                    #     },
+                    #     name="nelf",
+                    # )
+                    # background_density_da.T.plot()
+                    # plt.savefig(os.path.join(density_dir, "background_density.png"))
+                    # plt.close()
+                    # background_density_da.to_netcdf(os.path.join(density_dir, "background_density.nc"))
 
-                    nelf_da.T.plot()
-                    plt.savefig(os.path.join(nelf_dir, "nelf.png"))
-                    plt.close()
-                    nelf_da.to_netcdf(os.path.join(nelf_dir, "nelf.nc"))
+                    # nelf_da.T.plot()
+                    # plt.savefig(os.path.join(nelf_dir, "nelf.png"))
+                    # plt.close()
+                    # nelf_da.to_netcdf(os.path.join(nelf_dir, "nelf.nc"))
 
                     mlflow.log_artifacts(td)
 

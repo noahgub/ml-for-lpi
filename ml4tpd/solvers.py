@@ -12,59 +12,12 @@ from adept.lpse2d import BaseLPSE2D, ArbitraryDriver
 from adept._lpse2d.modules import driver
 
 from .modules.drivers import GenerativeDriver, TPDLearner, ZeroLiner
-from .helpers import postprocess_bandwidth, calc_tpd_threshold_intensity, calc_tpd_broadband_threshold_intensity
+from .helpers import postprocess_bandwidth, calc_tpd_threshold_intensity, calc_tpd_broadband_threshold_intensity, calc_srs_threshold_intensity, calc_srs_broadband_threshold_intensity
 
 
-class TPDModule(BaseLPSE2D):
+class LPIModule(BaseLPSE2D):
     def __init__(self, cfg) -> None:
         super().__init__(cfg)
-
-    def init_modules(self) -> Dict:
-        self.metric_timesteps = np.argmin(
-            np.abs(self.cfg["save"]["default"]["t"]["ax"] - self.cfg["opt"]["metric_time_in_ps"])
-        )
-        self.metric_dt = self.cfg["save"]["default"]["t"]["ax"][1] - self.cfg["save"]["default"]["t"]["ax"][0]
-        try:
-            return super().init_modules()
-        except NotImplementedError:
-            modules = {}
-            if "generative" == self.cfg["drivers"]["E0"]["shape"].casefold():
-                modules = {"laser": GenerativeDriver(self.cfg)}
-            elif "learner" == self.cfg["drivers"]["E0"]["shape"].casefold():
-                modules = {"laser": TPDLearner(self.cfg)}
-            elif "random_phaser" == self.cfg["drivers"]["E0"]["shape"].casefold():
-                laser_module = driver.load(self.cfg, ArbitraryDriver)
-                laser_module = tree_at(
-                    lambda tree: tree.phases,
-                    laser_module,
-                    replace=jnp.array(np.random.uniform(-1, 1, self.cfg["drivers"]["E0"]["num_colors"])),
-                )
-                modules = {"laser": laser_module}
-
-            elif "zero_lines" == self.cfg["drivers"]["E0"]["shape"].casefold():
-                modules = {"laser": ZeroLiner(self.cfg)}
-
-            else:
-                raise NotImplementedError("Only generative model is supported in this repo")
-
-        return modules
-
-    def write_units(self):
-        units_dict = super().write_units()
-        L = _Q(self.cfg["density"]["gradient scale length"]).to("um").value
-        lambda0 = _Q(self.cfg["units"]["laser_wavelength"]).to("um").value
-
-        tau0_over_tauc = self.cfg["drivers"]["E0"]["delta_omega_max"]
-        Te = _Q(self.cfg["units"]["reference electron temperature"]).to("keV").value
-        gradient_scale_length = _Q(self.cfg["density"]["gradient scale length"]).to("um").value
-        I_thresh = calc_tpd_threshold_intensity(Te, Ln=gradient_scale_length, w0=self.cfg["units"]["derived"]["w0"])
-        I_thresh_broadband = calc_tpd_broadband_threshold_intensity(Te, gradient_scale_length, lambda0, tau0_over_tauc)
-
-        units_dict["monochromatic threshold"] = float(I_thresh)
-        units_dict["broadband threshold"] = float(I_thresh_broadband)
-        self.cfg["units"]["derived"]["broadband threshold"] = units_dict["broadband threshold"]
-        self.cfg["units"]["derived"]["monochromatic threshold"] = units_dict["monochromatic threshold"]
-        return units_dict
 
     def __call__(self, trainable_modules, args=None):
         if args is not None:
@@ -116,6 +69,86 @@ class TPDModule(BaseLPSE2D):
         metrics.update(bw_metrics)
 
         return {"k": ppo["k"], "x": fields, "series": series, "metrics": metrics}
+    
+class SRSModule(LPIModule):
+    def __init__(self, cfg) -> None:
+        super().__init__(cfg)
+
+    def init_modules(self) -> Dict:
+        self.metric_timesteps = np.argmin(
+            np.abs(self.cfg["save"]["default"]["t"]["ax"] - self.cfg["opt"]["metric_time_in_ps"])
+        )
+        self.metric_dt = self.cfg["save"]["default"]["t"]["ax"][1] - self.cfg["save"]["default"]["t"]["ax"][0]
+        try:
+            return super().init_modules()
+        except NotImplementedError:
+            raise NotImplementedError("Only 'mono' and 'uniform' shape are supported for SRS")
+        
+    def write_units(self):
+        units_dict = super().write_units()
+        lambda0 = _Q(self.cfg["units"]["laser_wavelength"]).to("um").value
+
+        tau0_over_tauc = self.cfg["drivers"]["E0"]["delta_omega_max"]
+        Te = _Q(self.cfg["units"]["reference electron temperature"]).to("keV").value
+        gradient_scale_length = _Q(self.cfg["density"]["gradient scale length"]).to("um").value
+        I_thresh = calc_srs_threshold_intensity(Te, Ln=gradient_scale_length, w0=self.cfg["units"]["derived"]["w0"])
+        I_thresh_broadband = calc_srs_broadband_threshold_intensity(Te, gradient_scale_length, lambda0, tau0_over_tauc)
+
+        units_dict["monochromatic threshold"] = float(I_thresh)
+        units_dict["broadband threshold"] = float(I_thresh_broadband)
+        self.cfg["units"]["derived"]["broadband threshold"] = units_dict["broadband threshold"]
+        self.cfg["units"]["derived"]["monochromatic threshold"] = units_dict["monochromatic threshold"]
+        return units_dict
+    
+class TPDModule(LPIModule):
+    def __init__(self, cfg) -> None:
+        super().__init__(cfg)
+
+    def init_modules(self) -> Dict:
+        self.metric_timesteps = np.argmin(
+            np.abs(self.cfg["save"]["default"]["t"]["ax"] - self.cfg["opt"]["metric_time_in_ps"])
+        )
+        self.metric_dt = self.cfg["save"]["default"]["t"]["ax"][1] - self.cfg["save"]["default"]["t"]["ax"][0]
+        try:
+            return super().init_modules()
+        except NotImplementedError:
+            modules = {}
+            if "generative" == self.cfg["drivers"]["E0"]["shape"].casefold():
+                modules = {"laser": GenerativeDriver(self.cfg)}
+            elif "learner" == self.cfg["drivers"]["E0"]["shape"].casefold():
+                modules = {"laser": TPDLearner(self.cfg)}
+            elif "random_phaser" == self.cfg["drivers"]["E0"]["shape"].casefold():
+                laser_module = driver.load(self.cfg, ArbitraryDriver)
+                laser_module = tree_at(
+                    lambda tree: tree.phases,
+                    laser_module,
+                    replace=jnp.array(np.random.uniform(-1, 1, self.cfg["drivers"]["E0"]["num_colors"])),
+                )
+                modules = {"laser": laser_module}
+
+            elif "zero_lines" == self.cfg["drivers"]["E0"]["shape"].casefold():
+                modules = {"laser": ZeroLiner(self.cfg)}
+
+            else:
+                raise NotImplementedError("Only generative model is supported in this repo")
+
+        return modules
+    
+    def write_units(self):
+        units_dict = super().write_units()
+        lambda0 = _Q(self.cfg["units"]["laser_wavelength"]).to("um").value
+
+        tau0_over_tauc = self.cfg["drivers"]["E0"]["delta_omega_max"]
+        Te = _Q(self.cfg["units"]["reference electron temperature"]).to("keV").value
+        gradient_scale_length = _Q(self.cfg["density"]["gradient scale length"]).to("um").value
+        I_thresh = calc_tpd_threshold_intensity(Te, Ln=gradient_scale_length, w0=self.cfg["units"]["derived"]["w0"])
+        I_thresh_broadband = calc_tpd_broadband_threshold_intensity(Te, gradient_scale_length, lambda0, tau0_over_tauc)
+
+        units_dict["monochromatic threshold"] = float(I_thresh)
+        units_dict["broadband threshold"] = float(I_thresh_broadband)
+        self.cfg["units"]["derived"]["broadband threshold"] = units_dict["broadband threshold"]
+        self.cfg["units"]["derived"]["monochromatic threshold"] = units_dict["monochromatic threshold"]
+        return units_dict
 
 
 class ArbitrarywIntensityDriver(ArbitraryDriver):

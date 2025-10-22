@@ -33,6 +33,30 @@ def calc_tpd_threshold_intensity(Te: float, Ln: float, w0: float = 5366.52868179
 
     return I_threshold
 
+def calc_srs_broadband_threshold_intensity(Te_keV: float = 1.0, L_um: float = 10.0, lambda0: float = 0.8, tau0_over_tauc: float = 1.0) -> float:
+    return 1.0
+
+def calc_srs_threshold_intensity(Te: float, Ln: float, w0: float = 5366.528681791605) -> float:
+    
+    c = 2.99792458e10
+    me_cgs = 9.10938291e-28
+    e = 4.8032068e-10
+    lambda_cm = 3.51e-5
+    w0 = 2 * np.pi * c / lambda_cm
+
+    I_threshold = (
+        2 ** (1/3)
+        / np.sqrt(3)
+        * (c / (w0*(Ln * 1e-4)) ) ** (4/3)
+        * (me_cgs) ** 2
+        * w0 ** 2
+        * c ** 3
+        / (8 * np.pi * e**2)
+        * 1e-7 # cgs -> W/cm^2
+    )
+
+    return I_threshold / 1e14
+
 
 def calc_coherence(lpse_module, used_driver, density):
     def _calc_e0_(t, y, light_wave):
