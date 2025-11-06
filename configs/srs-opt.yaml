@@ -55,8 +55,8 @@ mlflow:
 save:
   fields:
     t:
-      dt: 1ps
-      tmax: 100ps
+      dt: 0.00008ps
+      tmax: 1ps
       tmin: 0ps
     # x:
     #   dx: 50nm
