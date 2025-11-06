@@ -36,13 +36,13 @@ drivers:
 grid:
   boundary_abs_coeff: 1
   boundary_width: 3.0um
-  dt: 0.008ps #0.008 for tpd
-  dx: 50nm
+  dt: 0.00008ps #0.008 for tpd
+  dx: 50nm # 50nm
   low_pass_filter: 0.5
-  tmax: 100ps
+  tmax: 1ps
   tmin: 0.0ns
-  ymax: 1um
-  ymin: -1um
+  ymax: 1.0um
+  ymin: -1.0um
 
 
 parsl:
@@ -75,9 +75,9 @@ terms:
     linear: true
     source: 
       noise: true
-      tpd: true
-      srs: false
-      lpi: tpd
+      tpd: false
+      srs: true
+      lpi: srs
   zero_mask: true
 units:
   atomic number: 40

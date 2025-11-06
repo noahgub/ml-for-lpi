@@ -34,7 +34,13 @@ def run_matlab(_cfg_path, bandwidth=False):
             _cfg["mlflow"]["run"] = f"seed-{i}"
             intensity = float(_cfg["units"]["laser intensity"].split(" ")[0])
             gsl = float(_cfg["density"]["gradient scale length"].split(" ")[0])
+            temperature = float(_cfg["units"]["reference electron temperature"].split(" ")[0])
             seed = _cfg["drivers"]["E0"]["params"]["phases"]["seed"]
+            if _cfg["terms"]["epw"]["source"]["lpi"] == "tpd":
+                lpi = "tpd"
+            elif _cfg["terms"]["epw"]["source"]["lpi"] == "srs":
+                lpi = "srs_1D"
+            print(f"{lpi=}")
 
             with mlflow.start_run(run_name=f"seed-{i}", nested=True, log_system_metrics=True) as mlflow_run:
                 with tempfile.TemporaryDirectory(dir=BASE_TEMPDIR) as td:
@@ -42,7 +48,7 @@ def run_matlab(_cfg_path, bandwidth=False):
                         "matlab",
                         "-batch",
                         f"addpath('{os.path.abspath('/global/common/software/m4490/lpse-matlab/')}');"
-                        + f"log_lpse({intensity}, {gsl}, {str(bandwidth).lower()}, {seed}, '{td}')",
+                        + f"log_lpse({intensity}, {gsl}, {str(bandwidth).lower()}, {seed}, '{td}', '{lpi}')",
                     ]
                     subprocess.run(matlab_cmd)
 
@@ -84,7 +90,7 @@ def run_matlab(_cfg_path, bandwidth=False):
                     t_skip = t_skip if t_skip > 1 else 1
                     tslice = slice(0, -1, t_skip)
 
-                    # save laser fields
+                    # # save laser fields
                     # E0x = np.array([data["E0_save"][i]["x"] for i in range(len(data["E0_save"]))])
                     # E0y = np.array([data["E0_save"][i]["y"] for i in range(len(data["E0_save"]))])
 
@@ -114,7 +120,7 @@ def run_matlab(_cfg_path, bandwidth=False):
                     # plt.close()
                     # laser_ds.to_netcdf(os.path.join(laser_dir, "laser_fields.nc"))
 
-                    # save epw fields
+                    # # save epw fields
                     # phi = np.array([data["divE_save"][i] for i in range(len(data["divE_save"]))])
                     # phi_da = xr.DataArray(
                     #     phi,

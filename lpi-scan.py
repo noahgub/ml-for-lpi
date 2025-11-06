@@ -60,7 +60,7 @@ def scan_loop(_cfg_path, lpi="tpd", shape="uniform", solver="adept"):
 
     temperatures = np.round(np.linspace(2000, 4000, 5), 0)
     gradient_scale_lengths = np.round(np.linspace(200, 600, 5), 0)
-    intensity_factors = np.linspace(1.0, 3.0, 4)
+    intensity_factors = np.linspace(4.0, 5.0, 5)
 
     if lpi=="tpd":
         from ml4tpd.helpers import calc_tpd_threshold_intensity as calc_threshold_intensity
@@ -74,6 +74,7 @@ def scan_loop(_cfg_path, lpi="tpd", shape="uniform", solver="adept"):
     # all_hps = list(product(temperatures, gradient_scale_lengths, intensity_factors))
     with open(_cfg_path, "r") as fi:
         orig_cfg = yaml.safe_load(fi)
+    orig_cfg["terms"]["epw"]["source"]["lpi"] = lpi
 
     parsl_config = setup_parsl(orig_cfg["parsl"]["provider"], 4, nodes=orig_cfg["parsl"]["nodes"], walltime="24:00:00")
     parsl_run_adept_fwd = python_app(run_adept_fwd)
@@ -102,12 +103,8 @@ def scan_loop(_cfg_path, lpi="tpd", shape="uniform", solver="adept"):
             if f"gsl={hp[0]:.1f}-intensity={calc_threshold_intensity(0, hp[0]) * hp[1]:.2e}"
             not in completed_runs
         ]
-    # all_hps = [
-    #     hp
-    #     for hp in all_hps
-    #     if f"temperature={hp[0]:.1f}-gsl={hp[1]:.1f}-intensity={calc_threshold_intensity(hp[0]/1000, hp[1]) * hp[2]:.2e}"
-    #     not in completed_runs
-    # ]
+
+
     print(f"Found {len(completed_runs)} completed runs, {len(all_hps)} remaining.")
 
     with parsl.load(parsl_config):
@@ -126,23 +123,20 @@ def scan_loop(_cfg_path, lpi="tpd", shape="uniform", solver="adept"):
                     hp_list = [(tt, gsl, intensity_factor) for tt, gsl, intensity_factor in all_hps[hp_slice]]
                 elif lpi == "srs":
                     hp_list = [(gsl, intensity_factor) for gsl, intensity_factor in all_hps[hp_slice]]
-                
+
                 for hp in hp_list:
                     if lpi == "tpd":
                         tt, gsl, intensity_factor = hp
-                        intensity = 1e14 * intensity_factor * calc_threshold_intensity(tt / 1000, gsl)
+                        intensity = 1e14 * intensity_factor
                         run_name = f"temperature={tt:.1f}-gsl={gsl:.1f}-intensity={intensity:.2e}"
                     elif lpi == "srs":
                         gsl, intensity_factor = hp
-                        tt = 0
-                        intensity = 1e14 * intensity_factor * calc_threshold_intensity(tt, gsl)
+                        tt = 3200
+                        intensity = 1e10 * intensity_factor
+                        # intensity = 0.0
                         run_name = f"gsl={gsl:.1f}-intensity={intensity:.2e}"
+                    
 
-                # for tt, gsl, intensity_factor in all_hps[hp_slice]:
-                #     intensity = 1e14 * intensity_factor * calc_threshold_intensity(tt / 1000, gsl) 
-                #     # * 1e14 - removed from intensity calculation here and above in all_hps = [...]
-                #     run_name = f"temperature={tt:.1f}-gsl={gsl:.1f}-intensity={intensity:.2e}"
-                
                     orig_cfg["mlflow"]["run"] = run_name
                     # check if run name exists by first searching all runs and then checking if the run name exists
                     # all_runs = mlflow.search_runs(experiment_names=[orig_cfg["mlflow"]["experiment"]])
