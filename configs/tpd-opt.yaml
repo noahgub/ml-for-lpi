@@ -1,6 +1,6 @@
 density:
   basis: linear
-  gradient scale length: 400.0um
+  gradient scale length: 200.0um
   max: 0.28
   min: 0.18
   noise:
@@ -10,7 +10,7 @@ density:
     
 drivers:
   E0:
-    delta_omega_max: 0.015
+    delta_omega_max: 0.005
     envelope:
       tc: 200.25ps
       tr: 0.1ps
@@ -21,13 +21,13 @@ drivers:
       yc: 50um
       yr: 0.2um
       yw: 1000um
-    num_colors: 64
+    num_colors: 32
     shape: arbitrary
     params:
       amplitudes: 
         init: random # uniform, random
         learned: true
-        activation: log # linear, log
+        activation: linear # linear, log
       phases:
         init: random # random, seed-###
         learned: true 
@@ -36,17 +36,18 @@ drivers:
 grid:
   boundary_abs_coeff: 1
   boundary_width: 3.0um
-  dt: 0.008ps #0.008 for tpd
-  dx: 50nm
-  low_pass_filter: 0.5
+  dt: 0.007ps
+  dx: 40nm
+  low_pass_filter: 0.65
+  low_pass_taper_fraction: 0.3
   tmax: 100ps
   tmin: 0.0ns
-  ymax: 1um
-  ymin: -1um
+  ymax: 8.0um
+  ymin: -8.0um
 
 
 parsl:
-  provider: local
+  provider: gpu
   nodes: 4
   walltime: 12:00:00
 mlflow:
@@ -55,21 +56,24 @@ mlflow:
 save:
   fields:
     t:
-      dt: 1ps
+      dt: 10ps
       tmax: 100ps
       tmin: 0ps
-    # x:
-    #   dx: 50nm
-    # y:
-    #   dy: 50nm
+    x:
+      dx: 50nm
+    y:
+      dy: 50nm
 solver: envelope-2d
 terms:
   epw:
+    hyperviscosity:
+      order: 6
+      coeff: 5.0e-4
     boundary:
       x: absorbing
       y: periodic
     damping:
-      collisions: 0.1
+      collisions: 0.0
       landau: true
     density_gradient: true
     linear: true
@@ -83,16 +87,17 @@ units:
   atomic number: 40
   envelope density: 0.25
   ionization state: 6
-  laser intensity: 7.0e14 W/cm^2
+  laser intensity: 5.0e14 W/cm^2
   laser_wavelength: 351nm
-  reference electron temperature: 3200 eV
+  reference electron temperature: 2000 eV
   reference ion temperature: 1000eV
 opt:
-  learning_rate: 0.1
+  learning_rate: 0.003
   batch_size: 1
   decay_steps: 100000
-  method: scipy
-  metric_time_in_ps: 22.5
+  method: optax
+  metric_time_in_ps: 98.0
+  checkpoints_coeff: 0.25 # number of checkpoints = checkpoints_coeff * log(nt + 2048)
   # XLA cache cleanup interval (iterations for scipy, epochs for optax)
   # Helps prevent memory buildup during long optimization runs
   cache_cleanup_interval: 1

@@ -1,4 +1,5 @@
 from typing import Dict
+import jax
 import numpy as np
 from astropy.units import Quantity as _Q
 
@@ -11,8 +12,14 @@ import optimistix as optmx
 from adept.lpse2d import BaseLPSE2D, ArbitraryDriver
 from adept._lpse2d.modules import driver
 
-from .modules.drivers import GenerativeDriver, TPDLearner, ZeroLiner
-from .helpers import postprocess_bandwidth, calc_tpd_threshold_intensity, calc_tpd_broadband_threshold_intensity, calc_srs_threshold_intensity, calc_srs_broadband_threshold_intensity
+from .modules.drivers import GenerativeDriver, TPDLearner, ZeroLiner, SmoothArbitraryDriver, TPDGaussianLearner
+from .helpers import (
+    postprocess_bandwidth,
+    calc_tpd_threshold_intensity,
+    calc_tpd_broadband_threshold_intensity,
+    calc_srs_threshold_intensity,
+    calc_srs_broadband_threshold_intensity,
+)
 
 
 class LPIModule(BaseLPSE2D):
@@ -30,7 +37,9 @@ class LPIModule(BaseLPSE2D):
         return log10e_sq, out_dict
 
     def vg(self, trainable_modules, args=None):
-        return filter_value_and_grad(self.__call__, has_aux=True)(trainable_modules, args)
+        (val, run_output), grad = filter_value_and_grad(self.__call__, has_aux=True)(trainable_modules, args)
+        run_output["grad"] = grad
+        return (val, run_output), grad
 
     def post_process(self, run_output: Dict, td: str) -> Dict:
         metrics = {}
@@ -38,7 +47,21 @@ class LPIModule(BaseLPSE2D):
             val, run_output = run_output
             metrics["loss"] = float(val)
 
+        # calculate l2 norm of gradients and log them as metrics
+        if "grad" in run_output and "laser" in run_output["grad"]:
+            grad = run_output["grad"]["laser"]
+            keyed_leaves, _ = jax.tree.flatten_with_path(grad)
+            for key_path, value in keyed_leaves:
+                key = key_path
+                if isinstance(key_path, tuple):
+                    key = "/".join(str(k) for k in key_path)
+                else:
+                    key = str(key_path)
+                l2_grad = np.linalg.norm(value)
+                metrics[f"l2_grad_{key}"] = float(l2_grad)
+
         ppo = super().post_process(run_output, td)
+        metrics.update(ppo["metrics"])
         bw_metrics = postprocess_bandwidth(
             run_output["args"]["drivers"], self, td, ppo["x"]["background_density"].data[0]
         )
@@ -69,7 +92,8 @@ class LPIModule(BaseLPSE2D):
         metrics.update(bw_metrics)
 
         return {"k": ppo["k"], "x": fields, "series": series, "metrics": metrics}
-    
+
+
 class SRSModule(LPIModule):
     def __init__(self, cfg) -> None:
         super().__init__(cfg)
@@ -83,7 +107,7 @@ class SRSModule(LPIModule):
             return super().init_modules()
         except NotImplementedError:
             raise NotImplementedError("Only 'mono' and 'uniform' shape are supported for SRS")
-        
+
     def write_units(self):
         units_dict = super().write_units()
         lambda0 = _Q(self.cfg["units"]["laser_wavelength"]).to("um").value
@@ -99,7 +123,8 @@ class SRSModule(LPIModule):
         self.cfg["units"]["derived"]["broadband threshold"] = units_dict["broadband threshold"]
         self.cfg["units"]["derived"]["monochromatic threshold"] = units_dict["monochromatic threshold"]
         return units_dict
-    
+
+
 class TPDModule(LPIModule):
     def __init__(self, cfg) -> None:
         super().__init__(cfg)
@@ -113,32 +138,32 @@ class TPDModule(LPIModule):
             return super().init_modules()
         except NotImplementedError:
             modules = {}
-            if "generative" == self.cfg["drivers"]["E0"]["shape"].casefold():
-                modules = {"laser": GenerativeDriver(self.cfg)}
-            elif "learner" == self.cfg["drivers"]["E0"]["shape"].casefold():
-                modules = {"laser": TPDLearner(self.cfg)}
-            elif "random_phaser" == self.cfg["drivers"]["E0"]["shape"].casefold():
-                laser_module = driver.load(self.cfg, ArbitraryDriver)
-                laser_module = tree_at(
-                    lambda tree: tree.phases,
-                    laser_module,
-                    replace=jnp.array(np.random.uniform(-1, 1, self.cfg["drivers"]["E0"]["num_colors"])),
-                )
-                modules = {"laser": laser_module}
-
-            elif "zero_lines" == self.cfg["drivers"]["E0"]["shape"].casefold():
-                modules = {"laser": ZeroLiner(self.cfg)}
-
-            else:
-                raise NotImplementedError("Only generative model is supported in this repo")
+            if "E0" in self.cfg["drivers"]:
+                DriverModule = self.choose_driver()
+                if "file" in self.cfg["drivers"]["E0"]:
+                    modules["laser"] = driver.load(self.cfg, DriverModule)
+                else:
+                    modules["laser"] = DriverModule(self.cfg)
 
         return modules
-    
+
+    def choose_driver(self):
+        if "generative" == self.cfg["drivers"]["E0"]["shape"].casefold():
+            return GenerativeDriver
+        elif "learner" == self.cfg["drivers"]["E0"]["shape"].casefold():
+            return TPDGaussianLearner
+        elif "smooth_arbitrary" == self.cfg["drivers"]["E0"]["shape"].casefold():
+            return SmoothArbitraryDriver
+        elif "zero_lines" == self.cfg["drivers"]["E0"]["shape"].casefold():
+            return ZeroLiner
+        else:
+            raise NotImplementedError(f"{self.cfg['drivers']['E0']['shape']} model is not implemented.")
+
     def write_units(self):
         units_dict = super().write_units()
         lambda0 = _Q(self.cfg["units"]["laser_wavelength"]).to("um").value
 
-        tau0_over_tauc = self.cfg["drivers"]["E0"]["delta_omega_max"]
+        tau0_over_tauc = self.cfg["drivers"]["E0"]["delta_omega_max"] * 2
         Te = _Q(self.cfg["units"]["reference electron temperature"]).to("keV").value
         gradient_scale_length = _Q(self.cfg["density"]["gradient scale length"]).to("um").value
         I_thresh = calc_tpd_threshold_intensity(Te, Ln=gradient_scale_length, w0=self.cfg["units"]["derived"]["w0"])
@@ -149,6 +174,18 @@ class TPDModule(LPIModule):
         self.cfg["units"]["derived"]["broadband threshold"] = units_dict["broadband threshold"]
         self.cfg["units"]["derived"]["monochromatic threshold"] = units_dict["monochromatic threshold"]
         return units_dict
+
+    def init_state_and_args(self):
+        super().init_state_and_args()
+        self.args["nn_inputs"] = self.initialize_nn_inputs()
+
+    def initialize_nn_inputs(self):
+        Te = _Q(self.cfg["units"]["reference electron temperature"]).to("keV").value
+        Ln = _Q(self.cfg["density"]["gradient scale length"]).to("um").value
+
+        Te = (Te - 3.0) / 1.0
+        Ln = (Ln - 400.0) / 200
+        return jnp.array((Te, Ln))
 
 
 class ArbitrarywIntensityDriver(ArbitraryDriver):
@@ -198,13 +235,10 @@ class TPDThresholdModule(TPDModule):
         :param trainable_modules: Description
         :param args: Description
         """
-        # self.grad_call = False
         args["diff_modules"] = trainable_modules
         optmx_sol = optmx.root_find(
             self.one_sim,
             solver=optmx.Bisection(rtol=0.01, atol=0.05),
-            # solver=optmx.Newton(rtol=0.01, atol=0.05),
-            # solver=optmx.Chord(rtol=0.01, atol=0.05),
             y0=self.cfg["units"]["derived"]["broadband threshold"] * 1e14,
             args=args,
             options={

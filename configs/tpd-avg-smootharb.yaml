@@ -7,10 +7,6 @@ density:
     max: 1.0e-09
     min: 1.0e-10
     type: uniform
-
-training data:
-  num_temperatures: 11
-  num_gradient_scale_lengths: 11
     
 drivers:
   E0:
@@ -26,24 +22,17 @@ drivers:
       yr: 0.2um
       yw: 1000um
     num_colors: 32
-    shape: learner
+    shape: smooth_arbitrary
     params:
       amplitudes: 
         init: uniform # uniform, random
         learned: true
-        activation: log # linear, log
+        activation: log
         bounded: false
       phases:
         init: random # random, seed-###
-        learned: true 
+        learned: true
         seed: 42
-      nn:
-        width_size: 32
-        out_size: 32
-        in_size: 2
-        depth: 5
-        key: 196
-        activation: tanh
 
 grid:
   boundary_abs_coeff: 1
@@ -56,14 +45,19 @@ grid:
   ymax: 6um
   ymin: -6um
 
+training data:
+  num_temperatures: 16
+  num_gradient_scale_lengths: 1
 
 parsl:
   provider: gpu
   nodes: 4
   walltime: 12:00:00
+
 mlflow:
   experiment: learn-tpd-100ps
-  run: Te-Ln-model
+  run: Te-avg-Ln200-smootharb-lr01
+
 save:
   fields:
     t:
@@ -102,12 +96,12 @@ units:
   reference electron temperature: 3200 eV
   reference ion temperature: 1000eV
 opt:
-  learning_rate: 0.0003
+  learning_rate: 0.1
   batch_size: 1
   decay_steps: 100000
   method: optax
   metric_time_in_ps: 98.5
-  checkpoints_coeff: 0.35 # number of checkpoints = checkpoints_coeff * (sqrt(2 * (max_steps + 2048) + 0.25) - 1.5)
+  checkpoints_coeff: 2.5 # number of checkpoints = checkpoints_coeff * (sqrt(2 * (max_steps + 2048) + 0.25) - 1.5)
   # XLA cache cleanup interval (iterations for scipy, epochs for optax)
   # Helps prevent memory buildup during long optimization runs
   cache_cleanup_interval: 1

@@ -4,20 +4,16 @@ import matplotlib.pyplot as plt
 import os
 
 
-
-def calc_tpd_broadband_threshold_intensity(Te_keV: float = 1.0, L_um: float = 10.0, lambda0: float = 0.8, tau0_over_tauc: float = 1.0) -> float:
-    return (
-        232
-        * Te_keV ** 0.75
-        / L_um ** (2 / 3)
-        / lambda0 ** (4 / 3)
-        * (tau0_over_tauc) ** 0.5
-    )
+def calc_tpd_broadband_threshold_intensity(
+    Te_keV: float = 1.0, L_um: float = 10.0, lambda0: float = 0.8, tau0_over_tauc: float = 1.0
+) -> float:
+    tau0_over_tauc *= 1.5 # fudge factor for flat spectra
+    return 232 * Te_keV**0.75 / L_um ** (2 / 3) / lambda0 ** (4 / 3) * (tau0_over_tauc) ** 0.5
 
 
 def calc_tpd_threshold_intensity(Te: float, Ln: float, w0: float = 5366.528681791605) -> float:
     """
-    Calculate the TPD threshold intensity
+    Calculate the TPD monochromatic threshold intensity
 
     :param Te:
     :return: intensity
@@ -132,10 +128,22 @@ def plot_bandwidth(e0, td):
 
 def postprocess_bandwidth(used_driver, lpse_module, td, density):
     import pickle
-
+    if_calc_coherence = False
     os.makedirs(os.path.join(td, "driver"), exist_ok=True)
     with open(os.path.join(td, "driver", "used_driver.pkl"), "wb") as fi:
         pickle.dump(used_driver, fi)
 
+    # write used_driver["E0"]["intensities"] and used_driver["E0"]["phases"] and used_driver["E0"]["delta_omega"] to a csv file
+    with open(os.path.join(td, "driver", "used_driver.csv"), "w") as fi:
+        fi.write("delta_omega, intensity, phase\n")
+        for dw, inten, phase in zip(
+            used_driver["E0"]["delta_omega"], used_driver["E0"]["intensities"], used_driver["E0"]["phases"]
+        ):
+            fi.write(f"{dw}, {inten}, {phase}\n")
+
     plot_bandwidth(used_driver["E0"], td)
-    return plot_coherence(lpse_module, used_driver, td, density)
+    if if_calc_coherence:
+        metrics = plot_coherence(lpse_module, used_driver, td, density)
+    else:
+        metrics = {}
+    return metrics
