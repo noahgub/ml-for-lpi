@@ -31,7 +31,10 @@ def clear_xla_cache():
     #     logger.warning(f"Garbage collection failed: {e}")
 
 
-def _execute_adept_forward(cfg, parent_run_id, lpi="tpd"):
+def _execute_adept_forward(cfg, parent_run_id):
+    import jax
+    # jax.config.update("jax_enable_x64", True)
+
     from adept import ergoExo
     
     if lpi=="tpd":
@@ -61,6 +64,7 @@ def run_adept_fwd(_cfg_path, parent_run_id=None, seed=None, run_name=None, lpi="
     Returns:
         The loss value from the forward evaluation.
     """
+
     import yaml, mlflow
     from adept import utils as adept_utils
 
@@ -111,6 +115,10 @@ def run_adept_fwd_ensemble(_cfg_path, num_seeds=8, lpi="tpd"):
                 lpi=lpi
             )
             vals.append(val)
+            if "file" in cfg["drivers"]["E0"]:
+                weights_path = cfg["drivers"]["E0"]["file"]
+                if os.path.exists(weights_path):
+                    mlflow.log_artifact(weights_path, run_id=parent_run.info.run_id)
         mean_val = float(np.mean(vals))
         mlflow.log_metric("loss", mean_val)
     return mean_val
@@ -121,6 +129,9 @@ def run_one_val_and_grad(parent_run_id, _run_cfg_path, export=False, lpi="tpd"):
     from equinox import partition
 
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
+    import jax
+    # jax.config.update("jax_enable_x64", True)
 
     from adept import ergoExo
     if lpi=="tpd":
@@ -136,6 +147,9 @@ def run_one_val_and_grad(parent_run_id, _run_cfg_path, export=False, lpi="tpd"):
     diff_modules, static_modules = {}, {}
     diff_modules["laser"], static_modules["laser"] = partition(modules["laser"], modules["laser"].get_partition_spec())
     val, grad, (sol, ppo, _) = exo.val_and_grad(diff_modules, args={"static_modules": static_modules}, export=export)
+    weights_path = _run_cfg["drivers"]["E0"]["file"]
+    if os.path.exists(weights_path):
+        mlflow.log_artifact(weights_path, run_id=exo.mlflow_run_id)
 
     return val, grad
 

@@ -22,7 +22,7 @@ drivers:
       yr: 0.2um
       yw: 1000um
     num_colors: 32
-    shape: generative
+    shape: smooth_arbitrary
     params:
       amplitudes: 
         init: uniform # uniform, random
@@ -33,13 +33,7 @@ drivers:
         init: random # random, seed-###
         learned: true
         seed: 42
-      nn:
-          decoder_width: 32
-          output_width: 32
-          input_width: 8
-          decoder_depth: 3
-          key: 424
-          activation: tanh
+    # file: s3://public-ergodic-continuum/188533/7409c1e0dfe149498b7f306e1268ed7b/artifacts/weights-e23-b00.eqx
 
 grid:
   boundary_abs_coeff: 1
@@ -49,39 +43,21 @@ grid:
   low_pass_filter: 0.66
   tmax: 25ps
   tmin: 0.0ns
-  ymax: 6um
-  ymin: -6um
-
-intensity_schedule:
-  min_initial: 0.5      # Starting lower bound for intensity factors
-  min_target: 1.8       # Target lower bound (reached when model is mature)
-  max_initial: 0.7      # Starting upper bound for intensity factors
-  max_target: 3.5       # Target upper bound (reached when model is mature)
-  loss_target_low: -20.0  # Loss below this indicates factors may be too low
-  loss_target_high:  -12.0 # Loss above this indicates numerical instability
-  nan_threshold: 0.2    # NaN fraction threshold for stability checks
-  growth_rate: 1.08     # Multiplicative factor for expanding range (8% per epoch)
-  shrink_rate: 0.95     # Multiplicative factor for reducing range when unstable
+  ymax: 0.25um
+  ymin: -0.25um
 
 training data:
   num_temperatures: 4
   num_gradient_scale_lengths: 4
 
 validation:
-  # New format: specify exact (Te, GSL) pairs directly
-  pairs:
-    - [2000.0, 200.0]  # Low temp, short gradient
-    - [4000.0, 600.0]  # High temp, long gradient
-  pairs_per_epoch: 2  # How many pairs to validate each epoch (samples without replacement)
+  temperatures: [2000.0, 4000.0]
+  gradient_scale_lengths: [200.0, 600.0]
+  temperatures_per_epoch: 2
+  gradient_scale_lengths_per_epoch: 2
   intensity_scan:
-    num_samples: 8
+    num_samples: 4
     max_total_samples: 16
-
-  # Old format (still supported if 'pairs' not specified):
-  # temperatures: [2000.0, 4000.0]
-  # gradient_scale_lengths: [200.0, 600.0]
-  # temperatures_per_epoch: 2
-  # gradient_scale_lengths_per_epoch: 2
 
 parsl:
   provider: gpu
@@ -89,8 +65,8 @@ parsl:
   walltime: 12:00:00
 
 mlflow:
-  experiment: learn-tpd-25ps
-  run: Te-Ln-avg-generative
+  experiment: learn-srs-25ps
+  run: Te-Ln-avg-smootharb
 
 save:
   fields:
@@ -118,8 +94,8 @@ terms:
     linear: true
     source: 
       noise: true
-      tpd: true
-      srs: false
+      tpd: false
+      srs: true
   zero_mask: true
 units:
   atomic number: 40
@@ -130,7 +106,7 @@ units:
   reference electron temperature: 3200 eV
   reference ion temperature: 1000eV
 opt:
-  learning_rate: 0.003
+  learning_rate: 0.1
   batch_size: 1
   decay_steps: 100000
   method: optax

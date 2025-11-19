@@ -55,7 +55,7 @@ else:
 
 
 
-def scan_loop(_cfg_path, lpi="tpd", shape="uniform", solver="adept", amp_init="uniform"):
+def scan_loop(_cfg_path, lpi="tpd", shape="uniform", solver="adept", num_nodes=4, amp_init="uniform", bandwidth_run_id=""):
     import uuid
     import numpy as np
     import yaml
@@ -84,6 +84,7 @@ def scan_loop(_cfg_path, lpi="tpd", shape="uniform", solver="adept", amp_init="u
 
     parsl_config = setup_parsl(orig_cfg["parsl"]["provider"], 4 if solver == "adept" else 0, nodes=orig_cfg["parsl"]["nodes"], walltime="8:00:00")
     parsl_run_adept_fwd = python_app(run_adept_fwd_ensemble)
+    # parsl_run_adept_fwd = run_adept_fwd_ensemble
     parsl_run_opt = python_app(run_opt_with_retry)
     orig_cfg["mlflow"]["experiment"] = f"{solver}-{shape}-{lpi}-100ps"
     print(f"Experiment: {solver}-{shape}-{lpi}-100ps")
@@ -161,7 +162,21 @@ def scan_loop(_cfg_path, lpi="tpd", shape="uniform", solver="adept", amp_init="u
                         orig_cfg["drivers"]["E0"]["params"]["amplitudes"]["bounded"] = False
                     if lpi == "tpd":
                         orig_cfg["units"]["reference electron temperature"] = f"{tt} eV"
+                        # orig_cfg["drivers"]["E0"]["params"]["amplitudes"]["bounded"] = False
+                        # orig_cfg["drivers"]["E0"]["file"] = (
+                        #     "s3://public-ergodic-continuum/188547/100c018a6d0b400a8ff22fe830741011/artifacts/laser.eqx"
+                        # )
+                    elif shape == "opt":
+                        orig_cfg["drivers"]["E0"]["num_colors"] = 32
+                        orig_cfg["drivers"]["E0"]["shape"] = "smooth_arbitrary"
+                        orig_cfg["drivers"]["E0"]["file"] = (
+                            # f"s3://public-ergodic-continuum/188533/{bandwidth_run_id}/artifacts/driver/used_driver.pkl"
+                            "s3://public-ergodic-continuum/188533/4d2fb0035ca44b5892bd7e9b0015e20f/artifacts/weights-e37-b00.eqx"
+                        )
+                        
+                    orig_cfg["units"]["reference electron temperature"] = f"{tt} eV"
                     orig_cfg["units"]["laser intensity"] = f"{intensity} W/cm^2"
+                    orig_cfg["units"]["intensity factor"] = f"{intensity_factor}"
                     orig_cfg["density"]["gradient scale length"] = f"{gsl} um"
 
                     if shape == "random_phaser":
@@ -170,42 +185,34 @@ def scan_loop(_cfg_path, lpi="tpd", shape="uniform", solver="adept", amp_init="u
                     with open(new_cfg_path := os.path.join(_td, f"config-{str(uuid.uuid4())[-6:]}.yaml"), "w") as fi:
                         yaml.dump(orig_cfg, fi)
 
-                        if solver == "adept":
-                            if shape in ["uniform", "random_phaser", "mono"]:
-                                vals[tt, gsl, intensity] = parsl_run_adept_fwd(
-                                    _cfg_path=new_cfg_path, num_seeds=1 if shape == "mono" else 4, lpi=lpi
-                                )
-                                # vals[tt, gsl, intensity] = run_adept_fwd(_cfg_path=new_cfg_path, num_seeds=1 if shape == "mono" else 4)
-                            elif shape == "arbitrary":
-                                vals[tt, gsl, intensity] = parsl_run_opt(new_cfg_path)
-                            else:
-                                raise NotImplementedError(f"Shape {shape} not implemented for adept.")
-
-                        # elif solver == "matlab":
-                        #     if shape == "uniform":
-                        #         vals[tt, gsl, intensity] = run_matlab(new_cfg_path, bandwidth=True)
-                        #     elif shape == "mono":
-                        #         vals[tt, gsl, intensity] = run_matlab(new_cfg_path, bandwidth=False)
-                        #     else:
-                        #         raise NotImplementedError(f"Shape {shape} not implemented for matlab.")
-                        # else:
-                        #     raise NotImplementedError(f"Shape {shape} not implemented for adept.")
-
-                        elif solver == "matlab":
-                            try:
-                                vals[tt, gsl, intensity] = run_matlab(new_cfg_path, shape=shape)
-                            except Exception as exc:
-                                logger.exception(
-                                    "MATLAB run failed for %s (T=%s, GSL=%s, I=%s): %s",
-                                    run_name,
-                                    tt,
-                                    gsl,
-                                    intensity,
-                                    exc,
-                                )
-                                continue  # carry on with the next HP combination
+                    if solver == "adept":
+                        if shape in ["uniform", "random_phaser", "mono", "smooth_arbitrary", "arbitrary", "opt"]:
+                            vals[tt, gsl, intensity] = parsl_run_adept_fwd(
+                                _cfg_path=new_cfg_path, num_seeds=1 if shape == "mono" else 2, lpi=lpi
+                            )
+                        # elif shape in ["arbitrary"]: #, "smooth_arbitrary"]:
+                            # vals[tt, gsl, intensity] = parsl_run_opt(new_cfg_path)
                         else:
-                            raise NotImplementedError(f"Solver {solver} not implemented.")
+                            raise NotImplementedError(f"Shape {shape} not implemented for adept.")
+
+                    elif solver == "matlab":
+                        try:
+                            vals[tt, gsl, intensity] = run_matlab(new_cfg_path, shape=shape, bandwidth_run_id=bandwidth_run_id)
+                        except Exception as exc:
+                            logger.exception(
+                                "MATLAB run failed for %s (T=%s, GSL=%s, I=%s): %s",
+                                run_name,
+                                tt,
+                                gsl,
+                                intensity,
+                                exc,
+                            )
+                            continue  # carry on with the next HP combination
+                    else:
+                        raise NotImplementedError(f"Solver {solver} not implemented.")
+
+                    # else:
+                    #     print(f"Run {run_name} already exists.")
 
                 if solver == "adept":
                     for (tt, gsl, intensity), v in vals.items():
@@ -223,14 +230,20 @@ def get_remaining_runs(orig_cfg, all_hps):
         for run_name in all_runs["tags.mlflow.runName"].values:
             if run_name.startswith("temperature="):
                 completed_runs.add(run_name)
-    all_hps = [
-        hp
-        for hp in all_hps
-        if f"temperature={hp[0]:.1f}-gsl={hp[1]:.1f}-intensity={round(hp[2] * calc_tpd_broadband_threshold_intensity(hp[0] / 1000, hp[1], 0.351, orig_cfg['drivers']['E0']['delta_omega_max'] * 2) * 1e14, 2):.2e}"
-        # if f"temperature={hp[0]:.1f}-gsl={hp[1]:.1f}-intensity={hp[2]:.2e}" not in completed_runs
-    ]
-    print(f"Found {len(completed_runs)} completed runs, {len(all_hps)} remaining.")
-    return all_hps, all_runs
+
+    remaining_runs = []
+    for hp in all_hps:
+        run_name = f"temperature={hp[0]:.1f}-gsl={hp[1]:.1f}-intensity={round(hp[2] * calc_tpd_broadband_threshold_intensity(hp[0] / 1000, hp[1], 0.351, orig_cfg['drivers']['E0']['delta_omega_max'] * 2) * 1e14, 2):.2e}-{shape}-dumps"
+        if run_name not in completed_runs:
+            remaining_runs.append(hp)
+    # all_hps = [
+    #     hp
+    #     for hp in all_hps
+    #     if f"temperature={hp[0]:.1f}-gsl={hp[1]:.1f}-intensity={round(hp[2] * calc_tpd_broadband_threshold_intensity(hp[0] / 1000, hp[1], 0.351, orig_cfg['drivers']['E0']['delta_omega_max'] * 2) * 1e14, 2):.2e}-opt"
+    #     # if f"temperature={hp[0]:.1f}-gsl={hp[1]:.1f}-intensity={hp[2]:.2e}" not in completed_runs
+    # ]
+    print(f"Found {len(completed_runs)} completed runs, {len(remaining_runs)} remaining.")
+    return remaining_runs, all_runs
 
 
 def retrieve_latest_child_run(mlflow, orig_cfg, run_name):
@@ -256,12 +269,13 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str, help="The config file")
     parser.add_argument("--lpi", type=str, default='tpd', help="The LPI to use: tpd or srs")
     parser.add_argument(
-        "--shape", type=str, default="uniform", help="The laser shape: uniform, random_phaser, mono, arbitrary"
+        "--shape", type=str, default="uniform", help="The laser shape: uniform, random_phaser, mono, arbitrary, opt"
     )
     parser.add_argument("--solver", type=str, default="adept", help="The solver to use: adept or matlab")
     parser.add_argument(
         "--init", type=str, default="uniform", help="The initialization for arbitrary shape: random or uniform"
     )
+    parser.add_argument("--bandwidth_run_id", type=str, default=None, help="The bandwidth run ID")
 
     args = parser.parse_args()
     cfg_path = args.config
@@ -269,7 +283,9 @@ if __name__ == "__main__":
     shape = args.shape
     solver = args.solver
     init = args.init
+    bandwidth_run_id = args.bandwidth_run_id
 
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-
-    scan_loop(cfg_path, lpi=lpi, shape=shape, solver=solver, amp_init=init)
+    scan_loop(
+        cfg_path, lpi=lpi, shape=shape, solver=solver, num_nodes=num_nodes, amp_init=args.init, bandwidth_run_id=bandwidth_run_id
+    )

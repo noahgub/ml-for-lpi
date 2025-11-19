@@ -1,4 +1,6 @@
+import os
 from typing import Dict
+from diffrax import SubSaveAt
 import jax
 import numpy as np
 from astropy.units import Quantity as _Q
@@ -48,7 +50,11 @@ class LPIModule(BaseLPSE2D):
             metrics["loss"] = float(val)
 
         # calculate l2 norm of gradients and log them as metrics
-        if "grad" in run_output and "laser" in run_output["grad"]:
+        if (
+            "grad" in run_output
+            and "laser" in run_output["grad"]
+            and "arbitrary" in self.cfg["drivers"]["E0"]["shape"].casefold()
+        ):
             grad = run_output["grad"]["laser"]
             keyed_leaves, _ = jax.tree.flatten_with_path(grad)
             for key_path, value in keyed_leaves:
@@ -72,15 +78,18 @@ class LPIModule(BaseLPSE2D):
         dt = fields.coords["t (ps)"].data[1] - fields.coords["t (ps)"].data[0]
 
         tint = self.cfg["opt"]["metric_time_in_ps"]
-        it = int(tint / dt)
-        total_esq = np.abs(fields["ex"][it:].data) ** 2 + np.abs(fields["ey"][it:].data ** 2) * dx * dy * dt
-        bw_metrics[f"mean_e_sq_{tint}_ps_to_end".replace(".", "p")] = float(np.mean(total_esq))
-        bw_metrics[f"log10_mean_e_sq_{tint}_ps_to_end".replace(".", "p")] = float(
-            np.log10(bw_metrics[f"mean_e_sq_{tint}_ps_to_end".replace(".", "p")])
-        )
-        bw_metrics[f"growth_rate_{tint}_ps_to_end".replace(".", "p")] = float(
-            np.mean(np.gradient(np.log(total_esq), dt))
-        )
+        tmax = fields.coords["t (ps)"].data[-1]
+        if tint < tmax:
+            it = int(tint / dt)
+            total_esq = np.abs(fields["ex"][it:].data) ** 2 + np.abs(fields["ey"][it:].data ** 2) * dx * dy * dt
+
+            bw_metrics[f"mean_e_sq_{tint}_ps_to_end".replace(".", "p")] = float(np.mean(total_esq))
+            bw_metrics[f"log10_mean_e_sq_{tint}_ps_to_end".replace(".", "p")] = float(
+                np.log10(bw_metrics[f"mean_e_sq_{tint}_ps_to_end".replace(".", "p")])
+            )
+            bw_metrics[f"growth_rate_{tint}_ps_to_end".replace(".", "p")] = float(
+                np.mean(np.gradient(np.log(total_esq), dt))
+            )
 
         series_metrics = {
             "last_esq": float(series["e_sq"][-1].data),
@@ -90,6 +99,28 @@ class LPIModule(BaseLPSE2D):
         }
         metrics.update(series_metrics)
         metrics.update(bw_metrics)
+        import xarray as xr
+
+        out_dict = {k: v for k, v in run_output["solver result"].ys["tpd"].items()}
+        series_xr = xr.Dataset(
+            {
+                k: xr.DataArray(v, coords=(("t (ps)", run_output["solver result"].ts["tpd"]),))
+                for k, v in out_dict.items()
+            }
+        )
+        series_xr.to_netcdf(os.path.join(td, "binary", "series_tpd.xr"), engine="h5netcdf", invalid_netcdf=True)
+
+        # plot series xr and save it
+        import matplotlib.pyplot as plt
+
+        for k in series_xr.keys():
+            fig, ax = plt.subplots(1, 1, figsize=(6, 3), tight_layout=True)
+            series_xr[k].plot(ax=ax)
+            # series_xr[k].plot(ax=ax[1])
+            # ax[1].set_yscale("log")
+            fig.savefig(os.path.join(td, "plots", f"{k}_vs_t.png"), bbox_inches="tight")
+            fig.savefig(os.path.join(td, "plots", f"{k}_vs_t.pdf"), bbox_inches="tight")
+            plt.close()
 
         return {"k": ppo["k"], "x": fields, "series": series, "metrics": metrics}
 

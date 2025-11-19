@@ -1,2 +1,2 @@
-git+https://github.com/ergodicio/adept.git@v0.0.8#egg=adept[gpu]
+git+https://github.com/ergodicio/adept.git@v0.0.12#egg=adept[gpu]
 parsl

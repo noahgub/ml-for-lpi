@@ -1,13 +1,12 @@
 density:
   basis: linear
-  gradient scale length: 400.0um
+  gradient scale length: 200.000 um
   max: 0.28
   min: 0.18
   noise:
     max: 1.0e-09
     min: 1.0e-10
     type: uniform
-    
 drivers:
   E0:
     delta_omega_max: 0.005
@@ -22,58 +21,55 @@ drivers:
       yr: 0.2um
       yw: 1000um
     num_colors: 32
-    shape: smooth_arbitrary
     params:
-      amplitudes: 
-        init: uniform # uniform, random
-        learned: true
+      amplitudes:
         activation: log
         bounded: false
+        init: uniform
+        learned: true
       phases:
-        init: random # random, seed-###
+        init: random
         learned: true
         seed: 42
-
+    shape: smooth_arbitrary
 grid:
   boundary_abs_coeff: 1
   boundary_width: 3.0um
-  dt: 0.007ps
-  dx: 40nm
-  low_pass_filter: 0.5
+  dt: 3.854 fs
+  dx: 68.2 nm
+  low_pass_filter: 0.66
   tmax: 100ps
   tmin: 0.0ns
   ymax: 6um
   ymin: -6um
-
-training data:
-  num_temperatures: 16
-  num_gradient_scale_lengths: 1
-
-parsl:
-  provider: gpu
-  nodes: 4
-  walltime: 12:00:00
-
 mlflow:
   experiment: learn-tpd-100ps
-  run: Te-avg-Ln200-smootharb-lr01
-
+  export: 'True'
+  run: epoch-33-validation-temperature=3066.7-gsl=200.0
+opt:
+  batch_size: 1
+  cache_cleanup_interval: 1
+  decay_steps: 100000
+  learning_rate: 0.1
+  method: optax
+  metric_time_in_ps: 98.5
+parsl:
+  nodes: 4
+  provider: gpu
+  walltime: 43200
 save:
   fields:
     t:
-      dt: 10ps
+      dt: 0.5ps
       tmax: 100ps
       tmin: 0ps
     x:
-      dx: 50nm
+      dx: 80nm
     y:
-      dy: 50nm
+      dy: 80nm
 solver: envelope-2d
 terms:
   epw:
-    hyperviscosity:
-      order: 6
-      coeff: 5.0e-4
     boundary:
       x: absorbing
       y: periodic
@@ -81,27 +77,37 @@ terms:
       collisions: 0.1
       landau: true
     density_gradient: true
+    hyperviscosity:
+      coeff: 1.0e-4
+      order: 6
     linear: true
-    source: 
+    source:
       noise: true
-      tpd: true
       srs: false
+      tpd: true
   zero_mask: true
+training data:
+  num_gradient_scale_lengths: 1
+  num_temperatures: 16
 units:
   atomic number: 40
   envelope density: 0.25
+  intensity factor: '1.283'
   ionization state: 6
-  laser intensity: 7.0e14 W/cm^2
+  laser intensity: 8.14e+14 W/cm^2
   laser_wavelength: 351nm
-  reference electron temperature: 3200 eV
+  reference electron temperature: 3066.670 eV
   reference ion temperature: 1000eV
-opt:
-  learning_rate: 0.1
-  batch_size: 1
-  decay_steps: 100000
-  method: optax
-  metric_time_in_ps: 98.5
-  checkpoints_coeff: 2.5 # number of checkpoints = checkpoints_coeff * (sqrt(2 * (max_steps + 2048) + 0.25) - 1.5)
-  # XLA cache cleanup interval (iterations for scipy, epochs for optax)
-  # Helps prevent memory buildup during long optimization runs
-  cache_cleanup_interval: 1
+
+training data:
+  num_temperatures: 4
+  num_gradient_scale_lengths: 4
+
+validation:
+  temperatures: [2000.0, 4000.0]
+  gradient_scale_lengths: [200.0, 600.0]
+  temperatures_per_epoch: 2
+  gradient_scale_lengths_per_epoch: 2
+  intensity_scan:
+    num_samples: 4
+    max_total_samples: 16

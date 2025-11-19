@@ -4,10 +4,16 @@ import matplotlib.pyplot as plt
 import os
 
 
+def calc_both_thresholds(Te_keV: float = 1.0, L_um: float = 10.0, lambda0: float = 0.8, tau0_over_tauc: float = 1.0):
+    I_mono = calc_tpd_threshold_intensity(Te_keV * 1e3, L_um * 1e-4)
+    I_broad = calc_tpd_broadband_threshold_intensity(Te_keV, L_um, lambda0, tau0_over_tauc)
+    return I_mono, I_broad
+
+
 def calc_tpd_broadband_threshold_intensity(
     Te_keV: float = 1.0, L_um: float = 10.0, lambda0: float = 0.8, tau0_over_tauc: float = 1.0
 ) -> float:
-    tau0_over_tauc *= 1.5 # fudge factor for flat spectra
+    # tau0_over_tauc *= 1.5 # fudge factor for flat spectra
     return 232 * Te_keV**0.75 / L_um ** (2 / 3) / lambda0 ** (4 / 3) * (tau0_over_tauc) ** 0.5
 
 
@@ -128,6 +134,7 @@ def plot_bandwidth(e0, td):
 
 def postprocess_bandwidth(used_driver, lpse_module, td, density):
     import pickle
+
     if_calc_coherence = False
     os.makedirs(os.path.join(td, "driver"), exist_ok=True)
     with open(os.path.join(td, "driver", "used_driver.pkl"), "wb") as fi:
