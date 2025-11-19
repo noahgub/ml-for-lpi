@@ -31,19 +31,23 @@ def clear_xla_cache():
     #     logger.warning(f"Garbage collection failed: {e}")
 
 
-def _execute_adept_forward(cfg, parent_run_id):
+def _execute_adept_forward(cfg, parent_run_id, lpi="tpd"):
     from adept import ergoExo
-    from ml4tpd import TPDModule
+    
+    if lpi=="tpd":
+        from ml4tpd import TPDModule as module
+    elif lpi=="srs":
+        from ml4tpd import SRSModule as module
 
     exo = ergoExo(parent_run_id=parent_run_id, mlflow_nested=True)
-    modules = exo.setup(cfg, adept_module=TPDModule)
+    modules = exo.setup(cfg, adept_module=module)
     run_output, _, _ = exo(modules)
     val = float(run_output[0])
     clear_xla_cache()
     return val
 
 
-def run_adept_fwd(_cfg_path, parent_run_id=None, seed=None, run_name=None):
+def run_adept_fwd(_cfg_path, parent_run_id=None, seed=None, run_name=None, lpi="tpd"):
     """
     Run a single ADEPT forward pass for the provided configuration.
 
@@ -73,16 +77,16 @@ def run_adept_fwd(_cfg_path, parent_run_id=None, seed=None, run_name=None):
         with mlflow.start_run(run_name=cfg["mlflow"]["run"], nested=active_run is not None) as run:
             # if log_params:
             #     adept_utils.log_params(cfg)
-            val = _execute_adept_forward(cfg, parent_run_id=run.info.run_id)
+            val = _execute_adept_forward(cfg, parent_run_id=run.info.run_id, lpi=lpi)
             mlflow.log_metric("loss", val)
         return val
     else:
         # if log_params:
         #     adept_utils.log_params(cfg)
-        return _execute_adept_forward(cfg, parent_run_id=parent_run_id)
+        return _execute_adept_forward(cfg, parent_run_id=parent_run_id, lpi=lpi)
 
 
-def run_adept_fwd_ensemble(_cfg_path, num_seeds=8):
+def run_adept_fwd_ensemble(_cfg_path, num_seeds=8, lpi="tpd"):
     import yaml, mlflow
 
     from adept import utils as adept_utils
@@ -103,7 +107,8 @@ def run_adept_fwd_ensemble(_cfg_path, num_seeds=8):
                 parent_run_id=parent_run.info.run_id,
                 seed=seed,
                 run_name=run_name,
-                log_params=False,
+                # log_params=False,
+                lpi=lpi
             )
             vals.append(val)
         mean_val = float(np.mean(vals))
@@ -111,20 +116,23 @@ def run_adept_fwd_ensemble(_cfg_path, num_seeds=8):
     return mean_val
 
 
-def run_one_val_and_grad(parent_run_id, _run_cfg_path, export=False):
+def run_one_val_and_grad(parent_run_id, _run_cfg_path, export=False, lpi="tpd"):
     import os, yaml
     from equinox import partition
 
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
     from adept import ergoExo
-    from ml4tpd import TPDModule
+    if lpi=="tpd":
+        from ml4tpd import TPDModule as module
+    elif lpi=="srs":
+        from ml4tpd import SRSModule as module
 
     with open(_run_cfg_path, "r") as fi:
         _run_cfg = yaml.safe_load(fi)
 
     exo = ergoExo(parent_run_id=parent_run_id, mlflow_nested=True)
-    modules = exo.setup(_run_cfg, adept_module=TPDModule)
+    modules = exo.setup(_run_cfg, adept_module=module)
     diff_modules, static_modules = {}, {}
     diff_modules["laser"], static_modules["laser"] = partition(modules["laser"], modules["laser"].get_partition_spec())
     val, grad, (sol, ppo, _) = exo.val_and_grad(diff_modules, args={"static_modules": static_modules}, export=export)
@@ -132,7 +140,7 @@ def run_one_val_and_grad(parent_run_id, _run_cfg_path, export=False):
     return val, grad
 
 
-def calc_loss_and_grads_with_retry(modules: Dict, epoch: int, orig_cfg: Dict, max_retries=3):
+def calc_loss_and_grads_with_retry(modules: Dict, epoch: int, orig_cfg: Dict, max_retries=3, lpi="tpd"):
     """
     Wrapper around calc_loss_and_grads with XLA/CUDA error handling and retries.
 
@@ -154,7 +162,7 @@ def calc_loss_and_grads_with_retry(modules: Dict, epoch: int, orig_cfg: Dict, ma
 
     for attempt in range(max_retries):
         try:
-            return calc_loss_and_grads(modules, epoch, orig_cfg)
+            return calc_loss_and_grads(modules, epoch, orig_cfg, lpi=lpi)
 
         except Exception as e:
             error_msg = str(e).lower()
@@ -216,7 +224,7 @@ def calc_loss_and_grads_with_retry(modules: Dict, epoch: int, orig_cfg: Dict, ma
                 raise
 
 
-def calc_loss_and_grads(modules: Dict, epoch: int, orig_cfg: Dict):
+def calc_loss_and_grads(modules: Dict, epoch: int, orig_cfg: Dict, lpi="tpd"):
     """
     This is a wrapper around the run_one_val_and_grad function.
 
@@ -271,7 +279,7 @@ def calc_loss_and_grads(modules: Dict, epoch: int, orig_cfg: Dict):
         with mlflow.start_run(nested=True, run_name=f"epoch-{epoch}") as nested_run:
             pass
 
-        val, grad = run_one_val_and_grad(run_id=nested_run.info.run_id, _cfg_path=_cfg_path)
+        val, grad = run_one_val_and_grad(run_id=nested_run.info.run_id, _cfg_path=_cfg_path, lpi=lpi)
         mlflow.log_artifacts(_td, run_id=nested_run.info.run_id)
 
     flat_grad, _ = ravel_pytree(grad["laser"])

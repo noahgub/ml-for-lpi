@@ -216,6 +216,6 @@ def log_best_loss(experiment_name: str) -> None:
 # Usage example based on your config
 if __name__ == "__main__":
     # Delete all runs in the experiment
-    experiment_name = "arbitrary-64lines-more"  # From your config
+    experiment_name = "learn-tpd-100ps-6-colors"  # From your config
     # delete_all_runs_in_experiment(experiment_name)
     delete_failed_temperature_runs(experiment_name)

@@ -24,17 +24,6 @@ def setup_parsl(parsl_provider="local", num_gpus=4, nodes=1, walltime="00:30:00"
                 this_provider = LocalProvider
                 provider_args = get_multinode_local_provider_args(nodes)
 
-<<<<<<< HEAD
-            htex = HighThroughputExecutor(
-                available_accelerators=num_gpus,
-                label=label,
-                provider=this_provider(**provider_args),
-                max_workers_per_node=4,
-                cpu_affinity="block",
-                address=address_by_hostname(),
-                worker_port_range=(50000, 60000),
-            )
-=======
                 htex = HighThroughputExecutor(
                     available_accelerators=num_gpus,
                     label=label,
@@ -52,7 +41,6 @@ def setup_parsl(parsl_provider="local", num_gpus=4, nodes=1, walltime="00:30:00"
                     max_workers_per_node=4,
                     cpu_affinity="block",
                 )
->>>>>>> 9149175aec04726060a93ddc1efdb0dda30618a4
 
     elif parsl_provider == "gpu":
         this_provider = SlurmProvider
@@ -64,11 +52,7 @@ def setup_parsl(parsl_provider="local", num_gpus=4, nodes=1, walltime="00:30:00"
             worker_port_range=(50000, 60000),
         )
 
-<<<<<<< HEAD
-    return Config(executors=[htex], retries=1, run_dir="/global/homes/n/ngub/srs/parsl_runs")
-=======
     return Config(executors=[htex], retries=0)
->>>>>>> 9149175aec04726060a93ddc1efdb0dda30618a4
 
 
 def get_singlenode_local_provider_args():
@@ -114,11 +98,6 @@ def get_multinode_local_provider_args(nodes):
                         export PYTHONPATH=$PYTHONPATH:/global/homes/n/ngub/srs/ml-for-lpi; \
                         export BASE_TEMPDIR='/pscratch/sd/n/ngub/tmp/'; \
                         export MLFLOW_TRACKING_URI='https://continuum.ergodic.io/experiments/'; \
-<<<<<<< HEAD
-=======
-                        module unload cudatoolkit; \
-                        export XLA_PYTHON_CLIENT_PREALLOCATE=false; \
->>>>>>> 9149175aec04726060a93ddc1efdb0dda30618a4
                         export MLFLOW_TRACKING_USERNAME={os.environ['MLFLOW_TRACKING_USERNAME']}; \
                         export MLFLOW_TRACKING_PASSWORD={os.environ['MLFLOW_TRACKING_PASSWORD']};",
         nodes_per_block=1,

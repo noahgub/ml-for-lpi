@@ -22,35 +22,35 @@ else:
     BASE_TEMPDIR = None
 
 
-def run_adept_fwd(_cfg_path, lpi, num_seeds=8):
-    import yaml, mlflow
+# def run_adept_fwd(_cfg_path, lpi, num_seeds=8):
+#     import yaml, mlflow
 
-    from adept import ergoExo, utils as adept_utils
-    import numpy as np
-    from jax import config
+#     from adept import ergoExo, utils as adept_utils
+#     import numpy as np
+#     from jax import config
 
-    config.update("jax_enable_x64", True)
+#     config.update("jax_enable_x64", True)
 
-    if lpi=="tpd":
-        from ml4tpd import TPDModule as module
-    elif lpi=="srs":
-        from ml4tpd import SRSModule as module
+#     if lpi=="tpd":
+#         from ml4tpd import TPDModule as module
+#     elif lpi=="srs":
+#         from ml4tpd import SRSModule as module
 
-    with open(_cfg_path, "r") as fi:
-        _cfg = yaml.safe_load(fi)
+#     with open(_cfg_path, "r") as fi:
+#         _cfg = yaml.safe_load(fi)
 
-    with mlflow.start_run(run_name=_cfg["mlflow"]["run"]) as parent_run:
-        adept_utils.log_params(_cfg)
-        vals = []
-        for i in range(num_seeds):
-            _cfg["drivers"]["E0"]["params"]["phases"]["seed"] = int(np.random.randint(0, 2**10))
-            _cfg["mlflow"]["run"] = f"seed-{i}"
-            exo = ergoExo(parent_run_id=parent_run.info.run_id, mlflow_nested=True)
-            modules = exo.setup(_cfg, adept_module=module)
-            run_output, ppo, _ = exo(modules)
-            val = run_output[0]
-            vals.append(val)
-        mlflow.log_metric("loss", np.mean(vals))
+#     with mlflow.start_run(run_name=_cfg["mlflow"]["run"]) as parent_run:
+#         adept_utils.log_params(_cfg)
+#         vals = []
+#         for i in range(num_seeds):
+#             _cfg["drivers"]["E0"]["params"]["phases"]["seed"] = int(np.random.randint(0, 2**10))
+#             _cfg["mlflow"]["run"] = f"seed-{i}"
+#             exo = ergoExo(parent_run_id=parent_run.info.run_id, mlflow_nested=True)
+#             modules = exo.setup(_cfg, adept_module=module)
+#             run_output, ppo, _ = exo(modules)
+#             val = run_output[0]
+#             vals.append(val)
+#         mlflow.log_metric("loss", np.mean(vals))
 
 
 
@@ -66,7 +66,7 @@ def scan_loop(_cfg_path, lpi="tpd", shape="uniform", solver="adept", amp_init="u
 
     temperatures = np.round(np.linspace(2000, 4000, 5), 0)
     gradient_scale_lengths = np.round(np.linspace(200, 600, 5), 0)
-    intensity_factors = np.linspace(4.0, 5.0, 5)
+    intensity_factors = np.linspace(3.0, 5.0, 10)
 
     if lpi=="tpd":
         from ml4tpd.helpers import calc_tpd_threshold_intensity as calc_threshold_intensity
@@ -173,7 +173,7 @@ def scan_loop(_cfg_path, lpi="tpd", shape="uniform", solver="adept", amp_init="u
                         if solver == "adept":
                             if shape in ["uniform", "random_phaser", "mono"]:
                                 vals[tt, gsl, intensity] = parsl_run_adept_fwd(
-                                    _cfg_path=new_cfg_path, lpi=lpi, num_seeds=1 if shape == "mono" else 4
+                                    _cfg_path=new_cfg_path, num_seeds=1 if shape == "mono" else 4, lpi=lpi
                                 )
                                 # vals[tt, gsl, intensity] = run_adept_fwd(_cfg_path=new_cfg_path, num_seeds=1 if shape == "mono" else 4)
                             elif shape == "arbitrary":

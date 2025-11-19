@@ -25,13 +25,16 @@ else:
     BASE_TEMPDIR = None
 
 
-def train_model(_cfg_path, parsl_provider="gpu", num_nodes=4):
+def train_model(_cfg_path, parsl_provider="gpu", num_nodes=4, num_colors=32):
     jax.config.update("jax_platform_name", "cpu")
     # jax.config.update("jax_enable_x64", True)
 
     with open(f"{_cfg_path}", "r") as fi:
         orig_cfg = yaml.safe_load(fi)
-
+    
+    orig_cfg["drivers"]["E0"]["num_colors"] = num_colors
+    print(f"Experiment: learn-tpd-100ps-{num_colors}-colors")
+    orig_cfg["mlflow"]["experiment"] = f"learn-tpd-100ps-{num_colors}-colors"
     mlflow.set_experiment(orig_cfg["mlflow"]["experiment"])
     exo = ergoExo()
     modules = exo.setup(orig_cfg, adept_module=TPDModule)
@@ -60,7 +63,7 @@ def initialize_training_data(cfg):
 
     for te, gsl in product(temperatures, gradient_scale_lengths):
         all_hps.append(
-            (te, gsl, round(calc_tpd_broadband_threshold_intensity(te / 1000, gsl, 0.351, bandwidth) * 1e14, 2))
+            (te, gsl, round(0.5*calc_tpd_broadband_threshold_intensity(te / 1000, gsl, 0.351, bandwidth) * 1e14, 2))
         )
     return all_hps
 
@@ -125,7 +128,7 @@ def _train_(
 
                         factor = rng.uniform(1.1, 1.3)
 
-                        intensity = factor * base_intensity
+                        intensity = 1.7 * factor * base_intensity
                         orig_cfg["units"]["intensity factor"] = f"{factor:.3f}"
                         orig_cfg["units"]["laser intensity"] = f"{intensity:.2e} W/cm^2"
                         orig_cfg["grid"]["dt"] = f"{np.random.uniform(6, 8):.3f} fs"
@@ -263,7 +266,7 @@ def initialize_resume(run_id: str, tmpdir: str) -> str:
     return cfg_path, weights_path, opt_state_path, latest_epoch
 
 
-def resume_train_model(cfg_path, run_id, start_epoch, weights_path, opt_state_path, parsl_provider="gpu", num_nodes=4):
+def resume_train_model(cfg_path, run_id, start_epoch, weights_path, opt_state_path, parsl_provider="gpu", num_nodes=4, num_colors=32):
     jax.config.update("jax_platform_name", "cpu")
     # jax.config.update("jax_enable_x64", True)
 
@@ -271,8 +274,10 @@ def resume_train_model(cfg_path, run_id, start_epoch, weights_path, opt_state_pa
         orig_cfg = yaml.safe_load(fi)
 
     orig_cfg["drivers"]["E0"]["file"] = str(weights_path)
-
+    orig_cfg["drivers"]["E0"]["num_colors"] = num_colors
+    orig_cfg["mlflow"]["experiment"] = f"learn-tpd-100ps-{num_colors}-colors"
     mlflow.set_experiment(orig_cfg["mlflow"]["experiment"])
+    print(f"Experiment: learn-tpd-100ps-{num_colors}-colors")
 
     copy_cfg = deepcopy(orig_cfg)
     exo = ergoExo(mlflow_run_id=run_id)
@@ -309,12 +314,14 @@ if __name__ == "__main__":
     parser.add_argument("--run_id", type=str, default=None, help="The MLflow run ID to use for resuming")
     parser.add_argument("--provider", type=str, default="gpu", help="The Parsl provider to use")
     parser.add_argument("--nodes", type=int, default=4, help="The number of nodes to use")
+    parser.add_argument("--num_colors", type=int, default=32, help="The number of colors to use")
 
     args = parser.parse_args()
     cfg_path = args.config
     parsl_provider = args.provider
     num_nodes = args.nodes
     resume_run_id = args.run_id
+    num_colors = args.num_colors
 
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
     if resume_run_id is not None:
@@ -328,6 +335,7 @@ if __name__ == "__main__":
                 opt_state_path,
                 parsl_provider=parsl_provider,
                 num_nodes=num_nodes,
+                num_colors=num_colors
             )
     else:
-        train_model(cfg_path, parsl_provider=parsl_provider, num_nodes=num_nodes)
+        train_model(cfg_path, parsl_provider=parsl_provider, num_nodes=num_nodes, num_colors=num_colors)

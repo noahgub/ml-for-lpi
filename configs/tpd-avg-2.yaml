@@ -21,7 +21,7 @@ drivers:
       yc: 50um
       yr: 0.2um
       yw: 1000um
-    num_colors: 10
+    num_colors: 4
     shape: arbitrary
     params:
       amplitudes: 
