@@ -100,29 +100,56 @@ class LPIModule(BaseLPSE2D):
         metrics.update(series_metrics)
         metrics.update(bw_metrics)
         import xarray as xr
+        print("Available keys in ys:", run_output["solver result"].ys.keys())
+        # out_dict = {k: v for k, v in run_output["solver result"].ys["tpd"].items()}
+        # series_xr = xr.Dataset(
+        #     {
+        #         k: xr.DataArray(v, coords=(("t (ps)", run_output["solver result"].ts["tpd"]),))
+        #         for k, v in out_dict.items()
+        #     }
+        # )
+        # series_xr.to_netcdf(os.path.join(td, "binary", "series_tpd.xr"), engine="h5netcdf", invalid_netcdf=True)
 
-        out_dict = {k: v for k, v in run_output["solver result"].ys["tpd"].items()}
-        series_xr = xr.Dataset(
-            {
-                k: xr.DataArray(v, coords=(("t (ps)", run_output["solver result"].ts["tpd"]),))
-                for k, v in out_dict.items()
-            }
-        )
-        series_xr.to_netcdf(os.path.join(td, "binary", "series_tpd.xr"), engine="h5netcdf", invalid_netcdf=True)
+        # # plot series xr and save it
+        # import matplotlib.pyplot as plt
 
-        # plot series xr and save it
-        import matplotlib.pyplot as plt
-
-        for k in series_xr.keys():
-            fig, ax = plt.subplots(1, 1, figsize=(6, 3), tight_layout=True)
-            series_xr[k].plot(ax=ax)
-            # series_xr[k].plot(ax=ax[1])
-            # ax[1].set_yscale("log")
-            fig.savefig(os.path.join(td, "plots", f"{k}_vs_t.png"), bbox_inches="tight")
-            fig.savefig(os.path.join(td, "plots", f"{k}_vs_t.pdf"), bbox_inches="tight")
-            plt.close()
+        # for k in series_xr.keys():
+        #     fig, ax = plt.subplots(1, 1, figsize=(6, 3), tight_layout=True)
+        #     series_xr[k].plot(ax=ax)
+        #     # series_xr[k].plot(ax=ax[1])
+        #     # ax[1].set_yscale("log")
+        #     fig.savefig(os.path.join(td, "plots", f"{k}_vs_t.png"), bbox_inches="tight")
+        #     fig.savefig(os.path.join(td, "plots", f"{k}_vs_t.pdf"), bbox_inches="tight")
+        # #     plt.close()
 
         return {"k": ppo["k"], "x": fields, "series": series, "metrics": metrics}
+    # def post_process(self, run_output: Dict, td: str) -> Dict:
+    #     metrics = {}
+    #     if isinstance(run_output, tuple):
+    #         val, run_output = run_output
+    #         metrics["loss"] = float(val)
+
+    #     # calculate l2 norm of gradients and log them as metrics
+    #     if "grad" in run_output and "laser" in run_output["grad"]:
+    #         grad = run_output["grad"]["laser"]
+    #         keyed_leaves, _ = jax.tree.flatten_with_path(grad)
+    #         for key_path, value in keyed_leaves:
+    #             key = key_path
+    #             if isinstance(key_path, tuple):
+    #                 key = "/".join(str(k) for k in key_path)
+    #             else:
+    #                 key = str(key_path)
+    #             l2_grad = np.linalg.norm(value)
+    #             metrics[f"l2_grad_{key}"] = float(l2_grad)
+
+    #     ppo = super().post_process(run_output, td)
+    #     metrics.update(ppo["metrics"])
+    #     bw_metrics = postprocess_bandwidth(
+    #         run_output["args"]["drivers"], self, td, ppo["x"]["background_density"].data[0]
+    #     )
+    #     metrics.update(bw_metrics)
+
+    #     return {"k": ppo["k"], "x": fields, "series": series, "metrics": metrics}
 
 
 class SRSModule(LPIModule):

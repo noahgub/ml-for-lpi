@@ -127,6 +127,7 @@ def run_adept_fwd_ensemble(_cfg_path, num_seeds=8, lpi="tpd"):
 def run_one_val_and_grad(parent_run_id, _run_cfg_path, export=False, lpi="tpd"):
     import os, yaml
     from equinox import partition
+    import mlflow
 
     os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
